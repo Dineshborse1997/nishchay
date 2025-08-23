@@ -14,6 +14,7 @@ import {
   XCircle,
   SkipForward
 } from "lucide-react";
+import { Link } from "react-router-dom";
 
 interface Question {
   id: number;
@@ -82,7 +83,12 @@ const sampleQuestions: Question[] = [
   }
 ];
 
-const QuizInterface = () => {
+interface QuizInterfaceProps {
+  examType?: string;
+  section?: string;
+}
+
+const QuizInterface = ({ examType, section }: QuizInterfaceProps) => {
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [timeLeft, setTimeLeft] = useState(3600); // 1 hour in seconds
   const [questionTime, setQuestionTime] = useState(0);
@@ -167,7 +173,9 @@ const QuizInterface = () => {
             <p className="text-muted-foreground">
               Your quiz has been submitted successfully. Results will be shown after processing.
             </p>
-            <Button className="w-full">View Results</Button>
+            <Button className="w-full" asChild>
+              <Link to="/results/1">View Results</Link>
+            </Button>
           </CardContent>
         </Card>
       </div>
