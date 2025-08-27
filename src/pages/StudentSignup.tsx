@@ -4,8 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Eye, EyeOff, User, Mail, Phone, Lock, Upload } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 
@@ -17,29 +16,48 @@ const StudentSignup = () => {
     mobile: "",
     password: "",
   });
-  const [photo, setPhoto] = useState<File | null>(null);
-  const [photoPreview, setPhotoPreview] = useState<string>("");
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
   const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  };
-
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setPhoto(file);
-      const reader = new FileReader();
-      reader.onload = () => setPhotoPreview(reader.result as string);
-      reader.readAsDataURL(file);
-    }
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validation
+    const { fullName, email, mobile, password } = formData;
+    
+    if (!fullName.trim() || !email.trim() || !mobile.trim() || !password) {
+      toast({
+        title: "Validation Error",
+        description: "Please fill in all fields",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (mobile.length < 10) {
+      toast({
+        title: "Invalid Mobile",
+        description: "Please enter a valid 10-digit mobile number",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (password.length < 6) {
+      toast({
+        title: "Weak Password",
+        description: "Password must be at least 6 characters long",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     if (!agreeTerms) {
       toast({
         title: "Terms Required",
@@ -50,16 +68,42 @@ const StudentSignup = () => {
     }
 
     setIsLoading(true);
-    
-    // Simulate signup process
-    setTimeout(() => {
+
+    try {
+      const response = await fetch("http://localhost:3001/api/signup", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          fullName: fullName.trim(),
+          email: email.trim(),
+          mobile: mobile.trim(),
+          password: password,
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to create account");
+      }
+
       toast({
         title: "Account Created",
-        description: "Welcome to PrepWise! Please login to continue.",
+        description: "Welcome to Nishchay! Please login to continue.",
       });
       navigate("/student/login");
+    } catch (error: any) {
+      console.error("Signup error:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create account",
+        variant: "destructive",
+      });
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
   };
 
   return (
@@ -67,43 +111,16 @@ const StudentSignup = () => {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center space-y-4">
           <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
-            <User className="w-8 h-8 text-primary" />
+            
           </div>
           <CardTitle className="text-2xl font-bold">Create Account</CardTitle>
-          <p className="text-muted-foreground">Join PrepWise and start your journey</p>
+          <p className="text-muted-foreground">Join Nishchay and start your journey</p>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSignup} className="space-y-4">
-            {/* Photo Upload */}
-            <div className="flex flex-col items-center space-y-2">
-              <Avatar className="w-20 h-20">
-                {photoPreview ? (
-                  <img src={photoPreview} alt="Profile" className="w-full h-full object-cover" />
-                ) : (
-                  <AvatarFallback>
-                    <User className="w-8 h-8" />
-                  </AvatarFallback>
-                )}
-              </Avatar>
-              <Label htmlFor="photo" className="cursor-pointer">
-                <div className="flex items-center space-x-2 text-sm text-primary hover:underline">
-                  <Upload className="w-4 h-4" />
-                  <span>Upload Photo</span>
-                </div>
-                <Input
-                  id="photo"
-                  type="file"
-                  accept="image/*"
-                  onChange={handlePhotoUpload}
-                  className="hidden"
-                />
-              </Label>
-            </div>
-
             <div className="space-y-2">
               <Label htmlFor="fullName">Full Name</Label>
               <div className="relative">
-                <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="fullName"
                   placeholder="Enter your full name"
@@ -118,7 +135,6 @@ const StudentSignup = () => {
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <div className="relative">
-                <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="email"
                   type="email"
@@ -134,15 +150,18 @@ const StudentSignup = () => {
             <div className="space-y-2">
               <Label htmlFor="mobile">Mobile Number</Label>
               <div className="relative">
-                <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="mobile"
                   type="tel"
                   placeholder="Enter your mobile number"
                   value={formData.mobile}
-                  onChange={(e) => handleInputChange("mobile", e.target.value)}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+                    handleInputChange("mobile", value);
+                  }}
                   className="pl-10"
                   required
+                  maxLength={10}
                 />
               </div>
             </div>
@@ -150,7 +169,6 @@ const StudentSignup = () => {
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
               <div className="relative">
-                <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}

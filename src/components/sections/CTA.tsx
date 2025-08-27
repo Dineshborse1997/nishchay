@@ -26,7 +26,7 @@ const CTA = () => {
             </h2>
             
             <p className="text-xl md:text-2xl text-white/90 mb-8 max-w-2xl mx-auto">
-              Join thousands of successful candidates who achieved their dream government jobs with PrepWise
+              Join thousands of successful candidates who achieved their dream government jobs with Nishchay
             </p>
           </div>
 

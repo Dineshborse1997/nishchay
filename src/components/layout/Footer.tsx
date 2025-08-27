@@ -13,7 +13,7 @@ const Footer = () => {
               <div className="bg-gradient-primary rounded-lg p-2">
                 <BookOpen className="h-6 w-6 text-primary-foreground" />
               </div>
-              <span className="text-2xl font-bold text-gradient-primary">PrepWise</span>
+              <span className="text-2xl font-bold text-gradient-primary">Nishchay</span>
             </Link>
             <p className="text-muted-foreground">
               Maharashtra's leading platform for competitive exam preparation. 

@@ -18,16 +18,40 @@ const AdminLogin = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    
-    // Simulate admin login
-    setTimeout(() => {
+
+    try {
+      const response = await fetch('http://localhost:3001/api/admin/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Login failed');
+      }
+
+      // Store admin user data in localStorage
+      localStorage.setItem('user', JSON.stringify(data.user));
+      
       toast({
         title: "Admin Login Successful",
-        description: "Welcome to PrepWise Admin Panel",
+        description: "Welcome to Nishchay Admin Panel",
       });
       navigate("/admin/dashboard");
+    } catch (error: any) {
+      console.error("Login error:", error);
+      toast({
+        title: "Login Failed",
+        description: error.message || "Invalid username or password",
+        variant: "destructive",
+      });
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   return (
@@ -38,7 +62,7 @@ const AdminLogin = () => {
             <Shield className="w-8 h-8 text-primary" />
           </div>
           <CardTitle className="text-2xl font-bold">Admin Portal</CardTitle>
-          <p className="text-muted-foreground">Access PrepWise Admin Dashboard</p>
+          <p className="text-muted-foreground">Access Nishchay Admin Dashboard</p>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">

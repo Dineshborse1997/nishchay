@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -27,50 +27,212 @@ const ProfilePage = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [profileData, setProfileData] = useState({
-    fullName: "John Doe",
-    email: "john.doe@email.com",
-    mobile: "+91 9876543210",
-    photo: ""
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
   });
+  const [profileData, setProfileData] = useState({
+    fullName: "",
+    email: "",
+    mobile: "",
+    photo: "",
+    memberSince: ""
+  });
+  const [recentAttempts, setRecentAttempts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
   const { toast } = useToast();
 
-  const recentAttempts = [
-    {
-      id: 1,
-      exam: "Police Bharti",
-      section: "Model Questions",
-      set: "Set 1",
-      score: 75,
-      date: "2024-01-15",
-      time: "45:30",
-      status: "completed"
-    },
-    {
-      id: 2,
-      exam: "Talathi Bharti",
-      section: "PYQs",
-      year: "2023",
-      score: 82,
-      date: "2024-01-12",
-      time: "52:15",
-      status: "completed"
-    }
-  ];
+  useEffect(() => {
+    fetchUserData();
+  }, []);
 
-  const handleSaveProfile = () => {
-    toast({
-      title: "Profile Updated",
-      description: "Your profile has been updated successfully.",
-    });
-    setIsEditing(false);
+  const fetchUserData = async () => {
+    try {
+      const userData = localStorage.getItem('user');
+      if (!userData) return;
+      
+      const user = JSON.parse(userData);
+      
+      // Fetch profile
+      const profileRes = await fetch(`http://localhost:3001/api/user/profile/${user.id}`);
+      const profileData = await profileRes.json();
+      
+      if (profileRes.ok) {
+        const userProfile = profileData.user;
+        setProfileData({
+          fullName: userProfile.full_name,
+          email: userProfile.email,
+          mobile: userProfile.mobile,
+          photo: userProfile.photo || "",
+          memberSince: new Date(userProfile.created_at).toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'long' 
+          })
+        });
+      }
+      
+      // Fetch stats for recent activity
+      const statsRes = await fetch(`http://localhost:3001/api/user/stats/${user.id}`);
+      const statsData = await statsRes.json();
+      
+      if (statsRes.ok) {
+        setRecentAttempts(statsData.recentActivity || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch user data:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleChangePassword = () => {
-    toast({
-      title: "Password Changed",
-      description: "Your password has been updated successfully.",
-    });
+
+
+  const handleSaveProfile = async () => {
+    try {
+      const userData = localStorage.getItem('user');
+      if (!userData) {
+        toast({
+          title: "Error",
+          description: "User data not found. Please login again.",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      const user = JSON.parse(userData);
+      console.log('Updating profile for user:', user.id, {
+        ...profileData,
+        photo: profileData.photo ? 'Photo present' : 'No photo'
+      });
+      
+      const response = await fetch(`http://localhost:3001/api/user/profile/${user.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          fullName: profileData.fullName,
+          email: profileData.email,
+          mobile: profileData.mobile,
+          photo: profileData.photo || null
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
+      }
+      
+      const responseData = await response.json();
+      console.log('Update response:', responseData);
+      
+      if (response.ok) {
+        // Update localStorage
+        const updatedUser = { ...user, fullName: profileData.fullName };
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        
+        toast({
+          title: "Profile Updated",
+          description: "Your profile has been updated successfully.",
+        });
+        setIsEditing(false);
+      } else {
+        throw new Error(responseData.error || 'Failed to update profile');
+      }
+    } catch (error) {
+      console.error('Profile update error:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update profile. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handlePhotoChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Please select an image smaller than 5MB.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: "Invalid file type",
+        description: "Please select an image file.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setUploading(true);
+    
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64String = reader.result as string;
+      setProfileData(prev => ({ ...prev, photo: base64String }));
+      setUploading(false);
+      
+      toast({
+        title: "Photo Updated",
+        description: "Your profile photo has been updated. Don't forget to save changes.",
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleChangePassword = async () => {
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      toast({
+        title: "Error",
+        description: "New passwords do not match.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const userData = localStorage.getItem('user');
+      if (!userData) return;
+      
+      const user = JSON.parse(userData);
+      
+      const response = await fetch(`http://localhost:3001/api/user/password/${user.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          currentPassword: passwordData.currentPassword,
+          newPassword: passwordData.newPassword
+        })
+      });
+      
+      const responseData = await response.json();
+      
+      if (response.ok) {
+        toast({
+          title: "Password Changed",
+          description: "Your password has been updated successfully.",
+        });
+        setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      } else {
+        throw new Error(responseData.error || 'Failed to change password');
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to change password. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   return (
@@ -122,9 +284,22 @@ const ProfilePage = () => {
                   </Avatar>
                   {isEditing && (
                     <div>
-                      <Button variant="outline" size="sm" className="flex items-center space-x-2">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handlePhotoChange}
+                        className="hidden"
+                        id="photo-upload"
+                      />
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="flex items-center space-x-2"
+                        onClick={() => document.getElementById('photo-upload')?.click()}
+                        disabled={uploading}
+                      >
                         <Camera className="w-4 h-4" />
-                        <span>Change Photo</span>
+                        <span>{uploading ? 'Uploading...' : 'Change Photo'}</span>
                       </Button>
                       <p className="text-xs text-muted-foreground mt-1">Max size: 5MB (WebP, JPG, PNG)</p>
                     </div>
@@ -181,7 +356,7 @@ const ProfilePage = () => {
                     <div className="relative">
                       <Calendar className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                       <Input
-                        value="January 2024"
+                        value={profileData.memberSince}
                         className="pl-10"
                         disabled
                       />
@@ -206,6 +381,8 @@ const ProfilePage = () => {
                       id="currentPassword"
                       type={showPassword ? "text" : "password"}
                       className="pl-10 pr-10"
+                      value={passwordData.currentPassword}
+                      onChange={(e) => setPasswordData(prev => ({ ...prev, currentPassword: e.target.value }))}
                     />
                     <Button
                       type="button"
@@ -227,6 +404,8 @@ const ProfilePage = () => {
                       id="newPassword"
                       type={showNewPassword ? "text" : "password"}
                       className="pl-10 pr-10"
+                      value={passwordData.newPassword}
+                      onChange={(e) => setPasswordData(prev => ({ ...prev, newPassword: e.target.value }))}
                     />
                     <Button
                       type="button"
@@ -248,6 +427,8 @@ const ProfilePage = () => {
                       id="confirmPassword"
                       type="password"
                       className="pl-10"
+                      value={passwordData.confirmPassword}
+                      onChange={(e) => setPasswordData(prev => ({ ...prev, confirmPassword: e.target.value }))}
                     />
                   </div>
                 </div>
@@ -287,40 +468,46 @@ const ProfilePage = () => {
                 <CardTitle>Recent Quiz Attempts</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {recentAttempts.map((attempt) => (
-                    <div key={attempt.id} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div className="space-y-1">
-                        <div className="flex items-center space-x-2">
-                          <h4 className="font-medium">{attempt.exam}</h4>
-                          <Badge variant="outline">{attempt.section}</Badge>
+                {loading ? (
+                  <div className="text-center py-8">
+                    <p className="text-muted-foreground">Loading recent activity...</p>
+                  </div>
+                ) : recentAttempts.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-muted-foreground">No quiz attempts yet. Start practicing to see your activity here!</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {recentAttempts.map((attempt) => (
+                      <div key={attempt.id} className="flex items-center justify-between p-4 border rounded-lg">
+                        <div className="space-y-1">
+                          <div className="flex items-center space-x-2">
+                            <h4 className="font-medium">{attempt.exam_title}</h4>
+                            <Badge variant="outline">Score: {attempt.percentage}%</Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            {attempt.score}/{attempt.total_questions} correct
+                          </p>
+                          <div className="flex items-center space-x-4 text-sm text-muted-foreground">
+                            <span className="flex items-center space-x-1">
+                              <Calendar className="w-3 h-3" />
+                              <span>{new Date(attempt.created_at).toLocaleDateString()}</span>
+                            </span>
+                          </div>
                         </div>
-                        <p className="text-sm text-muted-foreground">
-                          {attempt.set ? `Set: ${attempt.set}` : `Year: ${attempt.year}`}
-                        </p>
-                        <div className="flex items-center space-x-4 text-sm text-muted-foreground">
-                          <span className="flex items-center space-x-1">
-                            <Calendar className="w-3 h-3" />
-                            <span>{attempt.date}</span>
-                          </span>
-                          <span className="flex items-center space-x-1">
-                            <Clock className="w-3 h-3" />
-                            <span>{attempt.time}</span>
-                          </span>
+                        <div className="text-right">
+                          <div className="flex items-center space-x-2 mb-1">
+                            <Trophy className="w-4 h-4 text-primary" />
+                            <span className="font-semibold text-primary">{attempt.percentage}%</span>
+                          </div>
+                          <Button variant="outline" size="sm" asChild>
+                            <Link to={`/results/${attempt.id}`}>View Details</Link>
+                          </Button>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <div className="flex items-center space-x-2 mb-1">
-                          <Trophy className="w-4 h-4 text-primary" />
-                          <span className="font-semibold text-primary">{attempt.score}</span>
-                        </div>
-                        <Button variant="outline" size="sm" asChild>
-                          <Link to={`/results/${attempt.id}`}>View Details</Link>
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

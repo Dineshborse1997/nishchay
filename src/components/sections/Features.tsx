@@ -74,7 +74,7 @@ const Features = () => {
         {/* Section Header */}
         <div className="text-center mb-16 animate-slide-up">
           <h2 className="text-4xl md:text-5xl font-bold text-gradient-primary mb-6">
-            Why Choose PrepWise?
+            Why Choose Nishchay?
           </h2>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
             Our comprehensive platform is designed specifically for Maharashtra government 

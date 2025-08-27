@@ -14,7 +14,7 @@ import {
   XCircle,
   SkipForward
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 interface Question {
   id: number;
@@ -32,63 +32,23 @@ interface Question {
     c: string;
     d: string;
   };
+  correct_answer: string;
   subject: string;
   difficulty: "easy" | "medium" | "hard";
   expectedTime: number;
   negativeMarks: boolean;
 }
 
-const sampleQuestions: Question[] = [
-  {
-    id: 1,
-    text: "What is the capital of Maharashtra?",
-    textMarathi: "महाराष्ट्राची राजधानी कोणती आहे?",
-    options: {
-      a: "Mumbai",
-      b: "Pune", 
-      c: "Nagpur",
-      d: "Nashik"
-    },
-    optionsMarathi: {
-      a: "मुंबई",
-      b: "पुणे",
-      c: "नागपूर", 
-      d: "नाशिक"
-    },
-    subject: "General Knowledge",
-    difficulty: "easy",
-    expectedTime: 30,
-    negativeMarks: true
-  },
-  {
-    id: 2,
-    text: "Which article of Indian Constitution deals with Right to Education?",
-    textMarathi: "भारतीय संविधानाचा कोणता कलम शिक्षणाच्या अधिकाराशी संबंधित आहे?",
-    options: {
-      a: "Article 19",
-      b: "Article 21A",
-      c: "Article 25", 
-      d: "Article 32"
-    },
-    optionsMarathi: {
-      a: "कलम १९",
-      b: "कलम २१ अ",
-      c: "कलम २५",
-      d: "कलम ३२"
-    },
-    subject: "Constitution",
-    difficulty: "medium",
-    expectedTime: 45,
-    negativeMarks: true
-  }
-];
+
 
 interface QuizInterfaceProps {
   examType?: string;
   section?: string;
+  year?: string;
 }
 
-const QuizInterface = ({ examType, section }: QuizInterfaceProps) => {
+const QuizInterface = ({ examType, section, year }: QuizInterfaceProps) => {
+  const navigate = useNavigate();
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [timeLeft, setTimeLeft] = useState(3600); // 1 hour in seconds
   const [questionTime, setQuestionTime] = useState(0);
@@ -96,9 +56,68 @@ const QuizInterface = ({ examType, section }: QuizInterfaceProps) => {
   const [flagged, setFlagged] = useState<Set<number>>(new Set());
   const [language, setLanguage] = useState<"english" | "marathi">("english");
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const questions = sampleQuestions;
   const question = questions[currentQuestion];
+
+  // Fetch questions based on section
+  useEffect(() => {
+    const fetchQuestions = async () => {
+      try {
+        console.log('Fetching questions with params:', { examType, section, year });
+        const url = year ? 
+          `http://localhost:3001/api/questions/${examType}/${section}/${year}` :
+          `http://localhost:3001/api/questions/${examType}/${section}`;
+        console.log('API URL:', url);
+        const response = await fetch(url);
+        const data = await response.json();
+        console.log('API Response:', data);
+        
+        if (response.ok) {
+          // Transform database questions to match interface
+          const transformedQuestions = data.map((q: any) => {
+            console.log('Raw question from DB:', q);
+            return {
+              id: q.id,
+              text: q.question_text,
+              textMarathi: q.question_text, // For now, same as English
+              options: {
+                a: q.option_a,
+                b: q.option_b,
+                c: q.option_c,
+                d: q.option_d
+              },
+              optionsMarathi: {
+                a: q.option_a, // For now, same as English
+                b: q.option_b,
+                c: q.option_c,
+                d: q.option_d
+              },
+              correct_answer: q.correct_answer, // Add this field for score calculation
+              subject: q.category,
+              difficulty: q.difficulty,
+              expectedTime: 60,
+              negativeMarks: true
+            };
+          });
+          console.log('Transformed questions:', transformedQuestions);
+          setQuestions(transformedQuestions);
+          console.log('Questions set in state:', transformedQuestions);
+        } else {
+          console.error('Failed to fetch questions:', response.status, data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch questions:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (section && examType) {
+      fetchQuestions();
+    }
+  }, [section, examType, year]);
 
   // Timer effect
   useEffect(() => {
@@ -121,7 +140,68 @@ const QuizInterface = ({ examType, section }: QuizInterfaceProps) => {
   };
 
   const handleAnswerSelect = (option: string) => {
+    console.log(`Selected answer for question ${question.id}: '${option}' (type: ${typeof option})`);
     setAnswers({ ...answers, [question.id]: option });
+  };
+
+  const submitQuiz = async () => {
+    try {
+      const userData = localStorage.getItem('user');
+      if (!userData) return;
+      
+      const user = JSON.parse(userData);
+      
+      // Debug: Log answers and correct answers
+      console.log('User answers:', answers);
+      console.log('Questions with correct answers:', questions.map(q => ({ id: q.id, correct: q.correct_answer })));
+      
+      const correctAnswers = questions.filter(q => {
+        const userAnswer = answers[q.id];
+        const correctAnswer = q.correct_answer;
+        console.log(`Question ${q.id}: User answered '${userAnswer}' (type: ${typeof userAnswer}), Correct is '${correctAnswer}' (type: ${typeof correctAnswer})`);
+        const isCorrect = userAnswer && userAnswer.toString().toLowerCase() === correctAnswer.toString().toLowerCase();
+        console.log(`Match result: ${isCorrect}`);
+        return isCorrect;
+      }).length;
+      
+      const totalQuestions = questions.length;
+      const percentage = Math.round((correctAnswers / totalQuestions) * 100);
+      
+      console.log(`Final score: ${correctAnswers}/${totalQuestions} (${percentage}%)`);
+      
+      const response = await fetch('http://localhost:3001/api/results', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: user.id,
+          exam_id: null,
+          score: correctAnswers,
+          total_questions: totalQuestions,
+          percentage: percentage,
+          time_spent: 3600 - timeLeft,
+          answers: answers,
+          questions: questions.map(q => ({
+            id: q.id,
+            text: q.text,
+            correct_answer: q.correct_answer,
+            user_answer: answers[q.id] || null,
+            is_correct: answers[q.id] && answers[q.id].toString().toLowerCase() === q.correct_answer.toString().toLowerCase(),
+            subject: q.subject,
+            difficulty: q.difficulty
+          }))
+        })
+      });
+      
+      const data = await response.json();
+      if (response.ok) {
+        // Navigate to results page with the new result ID
+        navigate(`/results/${data.resultId}`);
+        return;
+      }
+    } catch (error) {
+      console.error('Failed to submit quiz:', error);
+    }
+    setIsSubmitted(true);
   };
 
   const toggleFlag = () => {
@@ -160,7 +240,38 @@ const QuizInterface = ({ examType, section }: QuizInterfaceProps) => {
     }
   };
 
-  const progress = ((currentQuestion + 1) / questions.length) * 100;
+  const progress = questions.length > 0 ? ((currentQuestion + 1) / questions.length) * 100 : 0;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading questions...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (questions.length === 0) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Card className="max-w-md w-full mx-4">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl">No Questions Available</CardTitle>
+          </CardHeader>
+          <CardContent className="text-center space-y-4">
+            <p className="text-muted-foreground">
+              No questions found for this section. Please contact admin to add questions.
+            </p>
+            <Button className="w-full" asChild>
+              <Link to="/dashboard">Back to Dashboard</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (isSubmitted) {
     return (
@@ -219,7 +330,7 @@ const QuizInterface = ({ examType, section }: QuizInterfaceProps) => {
             </Button>
             <Button 
               variant="destructive" 
-              onClick={() => setIsSubmitted(true)}
+              onClick={submitQuiz}
             >
               Submit Quiz
             </Button>
@@ -310,7 +421,15 @@ const QuizInterface = ({ examType, section }: QuizInterfaceProps) => {
                   </Button>
 
                   <div className="flex items-center space-x-3">
-                    <Button variant="outline" className="flex items-center space-x-2">
+                    <Button 
+                      variant="outline" 
+                      className="flex items-center space-x-2"
+                      onClick={() => {
+                        const newAnswers = { ...answers };
+                        delete newAnswers[question.id];
+                        setAnswers(newAnswers);
+                      }}
+                    >
                       <RotateCcw className="h-4 w-4" />
                       <span>Clear</span>
                     </Button>

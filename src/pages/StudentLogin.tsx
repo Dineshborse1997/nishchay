@@ -19,17 +19,61 @@ const StudentLogin = () => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
     
-    // Simulate login process
-    setTimeout(() => {
+    // Basic validation
+    if (!mobile || !password) {
+      toast({
+        title: "Validation Error",
+        description: "Please enter both mobile number and password",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (mobile.length < 10) {
+      toast({
+        title: "Invalid Mobile",
+        description: "Please enter a valid 10-digit mobile number",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setIsLoading(true);
+
+    try {
+      const response = await fetch('http://localhost:3001/api/student/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ mobile: mobile.trim(), password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Login failed');
+      }
+
+      // Store user data in localStorage
+      localStorage.setItem('user', JSON.stringify(data.user));
+      
       toast({
         title: "Login Successful",
-        description: "Welcome back to PrepWise!",
+        description: "Welcome back to Nishchay!",
       });
       navigate("/student/dashboard");
+    } catch (error: any) {
+      console.error("Login error:", error);
+      toast({
+        title: "Login Failed",
+        description: error.message || "Invalid mobile or password",
+        variant: "destructive",
+      });
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   return (
@@ -40,7 +84,7 @@ const StudentLogin = () => {
             <Lock className="w-8 h-8 text-primary" />
           </div>
           <CardTitle className="text-2xl font-bold">Student Login</CardTitle>
-          <p className="text-muted-foreground">Access your PrepWise account</p>
+          <p className="text-muted-foreground">Access your Nishchay account</p>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
